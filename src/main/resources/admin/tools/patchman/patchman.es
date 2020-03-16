@@ -1,5 +1,12 @@
+// Node modules
+import beautify from 'js-beautify';
+import serialize from 'serialize-javascript';
+//import traverse from 'traverse';
+
+// XP libraries
 import {toStr} from '/lib/util';
 import {forceArray} from '/lib/util/data';
+import {get as getContext} from '/lib/xp/context';
 import {list as listRepos} from '/lib/xp/repo';
 import {
 	connect as singleRepoConnect,
@@ -8,8 +15,11 @@ import {
 
 
 const DEFAULT_FIELDS = [
+	'_id',
 	'_path',
 	'_name',
+	'createdTime',
+	'modifiedTime',
 	'displayName'
 ];
 
@@ -47,8 +57,27 @@ const DEFAULT_AGGREGATIONS_OBJ = {
 const DEFAULT_AGGREGATIONS_STR = toStr(DEFAULT_AGGREGATIONS_OBJ);
 
 
+const TOUCH_FN = (node) => {
+	/* eslint-disable no-param-reassign */
+	/* eslint-disable no-self-assign */
+	/* eslint-disable no-underscore-dangle */
+	node._id = 'RENAMED'; // This should fail miserably since modify should not be allowed to give a new id...
+	//node._name = node._name;
+	//node._path = node._path;
+	/* eslint-enable */
+	return node;
+};
+const TOUCH_FN_SERIALIZED = serialize(TOUCH_FN);
+//log.info(`TOUCH_FN_SERIALIZED:${toStr(TOUCH_FN_SERIALIZED)}`);
+
+const TOUCH_FN_BEAUTIFIED = beautify(TOUCH_FN_SERIALIZED);
+//log.info(`TOUCH_FN_BEAUTIFIED:${TOUCH_FN_BEAUTIFIED}`);
+
 export function get(request) {
 	//log.info(`request:${toStr(request)}`);
+
+	const context = getContext();
+	//log.info(`context:${toStr(context)}`);
 
 	const {
 		//params: requestParams,
@@ -61,10 +90,13 @@ export function get(request) {
 			sort: sortParam = '_score DESC',
 			explain: explainParam, // 'on' = true
 			filters: filtersParam = DEFAULT_FILTERS_STR,
-			aggregations: aggregationsParam = DEFAULT_AGGREGATIONS_STR
+			aggregations: aggregationsParam = DEFAULT_AGGREGATIONS_STR,
+			editorFn: modifyParam = TOUCH_FN_BEAUTIFIED
 		}
 	} = request;
 	//log.info(`requestParams:${toStr(requestParams)}`);
+
+	//log.info(`modifyParam:${modifyParam}`);
 
 	//log.info(`filtersParam:${toStr(filtersParam)}`);
 
@@ -106,6 +138,7 @@ export function get(request) {
 		total: 0
 	};
 	const seenTopFields = [];
+	const modifyInReposWithIds = {};
 
 	if (multirepoConnection) {
 		queryParams = {
@@ -127,7 +160,26 @@ export function get(request) {
 				repoId,
 				branch
 			});
+			if (!modifyInReposWithIds[repoId]) {
+				modifyInReposWithIds[repoId] = [];
+			}
+			//log.info(`modifyInReposWithIds:${toStr(modifyInReposWithIds)}`);
+
 			const node = singleRepoConnection.get(nodeId); // Get once
+			modifyInReposWithIds[repoId].push(nodeId);
+			//log.info(`modifyInReposWithIds:${toStr(modifyInReposWithIds)}`);
+
+			/*const paths = traverse(node).paths();
+			log.info(`paths:${toStr(paths)}`);*/
+
+			/*traverse(node).forEach(function(value) { // eslint-disable-line
+				const key = this.key; // eslint-disable-line prefer-destructuring
+				if (!key.match(/^[0-9]+$/)) { // Not number
+					// continue
+				}
+				log.info(`key:${toStr(key)}`);
+			});*/
+
 			Object.keys(node).forEach((key) => {
 				if (!seenTopFields.includes(key)) {
 					seenTopFields.push(key);
@@ -138,6 +190,8 @@ export function get(request) {
 			};
 		});
 	}
+	//log.info(`modifyInReposWithIds:${toStr(modifyInReposWithIds)}`);
+
 	if (selectedFields.length) {
 		result.hits = result.hits.map(({
 			nodeId, score, repoId, branch, node
@@ -164,6 +218,12 @@ export function get(request) {
 	const aggregationsText = toStr(aggregationsObj);
 	const aggregationsArray = aggregationsText.split(/\r?\n/);
 
+	const modifyInReposWithIdsText = toStr(modifyInReposWithIds);
+	const modifyInReposWithIdsLines = modifyInReposWithIdsText.split(/\r?\n/);
+
+	const modifyText = modifyParam;
+	const modifyLines = modifyText.split(/\r?\n/);
+
 	const body = `<html>
 	<head>
 		<title>PatchMan</title>
@@ -180,7 +240,12 @@ export function get(request) {
 	</head>
 	<body>
 		<h1>PatchMan</h1>
-		<form>
+
+		<h2>Context</h2>
+		<pre>${toStr(context)}</pre>
+
+		<h2>Query</h2>
+		<form enctype="application/x-www-form-urlencoded" method="POST">
 			<table style="width: 100%">
 				<tbody>
 					<tr>
@@ -221,7 +286,7 @@ export function get(request) {
 					</tr>
 				</tbody>
 			</table>
-			<input type="submit"/>
+			<input type="submit" value="Query"/>
 		</form>
 
 		<h2>Sources</h2>
@@ -232,9 +297,31 @@ export function get(request) {
 
 		<h2>Result</h2>
 		<pre>${toStr(result)}</pre>
+
+		<h2>Modify</h2>
+		<form enctype="application/x-www-form-urlencoded" method="POST">
+			<table style="width: 100%">
+				<tbody>
+					<tr>
+						<th><label for="modifyInReposWithIds">Repositories and ids</label></th>
+						<td><textarea name="modifyInReposWithIds" rows="${modifyInReposWithIdsLines.length}">${modifyInReposWithIdsText}</textarea></td>
+					</tr>
+					<tr>
+						<th><label for="editorFn">Editor function</label></th>
+						<td><textarea name="editorFn" rows="${modifyLines.length}">${modifyText}</textarea></td>
+					</tr>
+				</tbody>
+			</table>
+			<input type="submit" value="!!!MODIFY!!!"/>
+		</form>
 	</body>
 </html>`;
 	return {
 		body
 	};
 } // get
+
+
+export function post(request) {
+	return get(request);
+} // post
