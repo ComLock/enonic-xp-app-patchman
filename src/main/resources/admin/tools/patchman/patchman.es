@@ -13,6 +13,18 @@ const DEFAULT_FIELDS = [
 	'displayName'
 ];
 
+const DEFAULT_FILTERS_STR = `{
+    "boolean": {
+        "must": [
+            {
+                "exists": {
+                    "field": "_name"
+                }
+            }
+        ]
+    }
+}`;
+
 export function get(request) {
 	//log.info(`request:${toStr(request)}`);
 
@@ -20,15 +32,21 @@ export function get(request) {
 		//params: requestParams,
 		params: {
 			repoIds: repoIdsParam = [],
-			count: countParam = '0',
+			count: countParam = '1',
 			start: startParam = '0',
-			query: queryParam = '',
+			query: queryParam = "_name LIKE '*'",
 			fields: fieldsParam = DEFAULT_FIELDS,
 			sort: sortParam = '_score DESC',
-			explain: explainParam // 'on' = true
+			explain: explainParam, // 'on' = true
+			filters: filtersParam = DEFAULT_FILTERS_STR
 		}
 	} = request;
 	//log.info(`requestParams:${toStr(requestParams)}`);
+
+	//log.info(`filtersParam:${toStr(filtersParam)}`);
+
+	const filtersObj = JSON.parse(filtersParam); // Ignores whitespace :)
+	//log.info(`filtersObj:${toStr(filtersObj)}`);
 
 	//log.info(`explainParam:${toStr(explainParam)}`);
 	const boolExplain = explainParam === 'on';
@@ -63,13 +81,15 @@ export function get(request) {
 		total: 0
 	};
 	const seenTopFields = [];
+
 	if (multirepoConnection) {
 		queryParams = {
 			count: intCount,
 			query: queryParam,
 			start: intStart,
 			sort: sortParam,
-			explain: boolExplain
+			explain: boolExplain,
+			filters: filtersObj
 		};
 		//log.info(`queryParams:${toStr(queryParams)}`);
 
@@ -109,11 +129,18 @@ export function get(request) {
 	const fieldOptionsHtml = seenTopFields.map((id) => `<option${selectedFields.includes(id) ? ' selected' : ''} value="${id}">${id}</option>`).join('');
 	//log.info(`result:${toStr(result)}`);
 
+	const filtersText = toStr(filtersObj);
+	//log.info(`filtersText:${filtersText}`);
+
+	const filtersArray = filtersText.split(/\r?\n/);
+	//log.info(`filtersArray:${toStr(filtersArray)}`);
+
 	const body = `<html>
 	<head>
 		<title>PatchMan</title>
 		<style type="text/css">
-			input[type=text] {
+			input[type=text],
+			textarea {
 				width: 100%;
 			}
 			th {
@@ -145,7 +172,7 @@ export function get(request) {
 					</tr>
 					<tr>
 						<th><label for="fields">Fields</label></th>
-						<td><select name="fields" multiple size="${seenTopFields.length || 1}">${fieldOptionsHtml}</select></td>
+						<td><select name="fields" multiple size="${seenTopFields.length || 1}">${fieldOptionsHtml}</select> Must fetch at least one result to show fields.</td>
 					</tr>
 					<tr>
 						<th><label for="sort">Sort</label></th>
@@ -155,10 +182,17 @@ export function get(request) {
 						<th><label for="explain">Explain</label></th>
 						<td><input${boolExplain ? ' checked' : ''} name="explain" type="checkbox"/></td>
 					</tr>
+					<tr>
+						<th><label for="filters">Filters</label></th>
+						<td><textarea name="filters" rows="${filtersArray.length}">${filtersText}</textarea></td>
+					</tr>
 				</tbody>
 			</table>
 			<input type="submit"/>
 		</form>
+
+		<h2>Sources</h2>
+		<pre>${toStr(sources)}</pre>
 
 		<h2>Query params</h2>
 		<pre>${toStr(queryParams)}</pre>
