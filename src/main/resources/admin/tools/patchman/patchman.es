@@ -7,6 +7,12 @@ import {
 } from '/lib/xp/node';
 
 
+const DEFAULT_FIELDS = [
+	'_path',
+	'_name',
+	'displayName'
+];
+
 export function get(request) {
 	//log.info(`request:${toStr(request)}`);
 
@@ -17,10 +23,15 @@ export function get(request) {
 			count: countParam = '0',
 			start: startParam = '0',
 			query: queryParam = '',
-			fields: fieldsParam = []
+			fields: fieldsParam = DEFAULT_FIELDS,
+			sort: sortParam = '_score DESC',
+			explain: explainParam // 'on' = true
 		}
 	} = request;
 	//log.info(`requestParams:${toStr(requestParams)}`);
+
+	//log.info(`explainParam:${toStr(explainParam)}`);
+	const boolExplain = explainParam === 'on';
 
 	const selectedRepoIds = forceArray(repoIdsParam);
 	//log.info(`selectedRepoIds:${toStr(selectedRepoIds)}`);
@@ -56,9 +67,12 @@ export function get(request) {
 		queryParams = {
 			count: intCount,
 			query: queryParam,
-			start: intStart
+			start: intStart,
+			sort: sortParam,
+			explain: boolExplain
 		};
 		//log.info(`queryParams:${toStr(queryParams)}`);
+
 		result = multirepoConnection.query(queryParams);
 		result.hits = result.hits.map(({
 			id: nodeId, score, repoId, branch
@@ -96,31 +110,52 @@ export function get(request) {
 	//log.info(`result:${toStr(result)}`);
 
 	const body = `<html>
+	<head>
+		<title>PatchMan</title>
+		<style type="text/css">
+			input[type=text] {
+				width: 100%;
+			}
+			th {
+				white-space: nowrap;
+				width: 1%;
+			}
+		</style>
+	</head>
 	<body>
 		<h1>PatchMan</h1>
 		<form>
-			<table>
-				<tr>
-					<th><label for="repoIds">Repositories</label></th>
-					<td><select name="repoIds" multiple size="${repoList.length || 1}">${repoOptionsHtml}</select></td>
-				</tr>
-				<tr>
-					<th><label for="count">Count</label></th>
-					<td><input name="count" type="number" value="${intCount}"/></td>
-				</tr>
-				<tr>
-					<th><label for="start">Start</label></th>
-					<td><input name="start" type="number" value="${intStart}"/></td>
-				</tr>
-				<tr>
-					<th><label for="query">Query</label></th>
-					<td><input name="query" type="text" value="${queryParam}"/></td>
-				</tr>
-				<tr>
-					<th><label for="fields">Fields</label></th>
-					<td><select name="fields" multiple size="${seenTopFields.length || 1}">${fieldOptionsHtml}</select></td>
-				</tr>
-
+			<table style="width: 100%">
+				<tbody>
+					<tr>
+						<th><label for="repoIds">Repositories</label></th>
+						<td><select name="repoIds" multiple size="${repoList.length || 1}">${repoOptionsHtml}</select></td>
+					</tr>
+					<tr>
+						<th><label for="count">Count</label></th>
+						<td><input name="count" type="number" value="${intCount}"/></td>
+					</tr>
+					<tr>
+						<th><label for="start">Start</label></th>
+						<td><input name="start" type="number" value="${intStart}"/></td>
+					</tr>
+					<tr>
+						<th><label for="query">Query</label></th>
+						<td><input name="query" type="text" value="${queryParam}"/></td>
+					</tr>
+					<tr>
+						<th><label for="fields">Fields</label></th>
+						<td><select name="fields" multiple size="${seenTopFields.length || 1}">${fieldOptionsHtml}</select></td>
+					</tr>
+					<tr>
+						<th><label for="sort">Sort</label></th>
+						<td><input name="sort" type="text" value="${sortParam}"/></td>
+					</tr>
+					<tr>
+						<th><label for="explain">Explain</label></th>
+						<td><input${boolExplain ? ' checked' : ''} name="explain" type="checkbox"/></td>
+					</tr>
+				</tbody>
 			</table>
 			<input type="submit"/>
 		</form>
