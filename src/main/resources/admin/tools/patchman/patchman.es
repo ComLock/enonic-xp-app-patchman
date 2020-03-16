@@ -13,17 +13,39 @@ const DEFAULT_FIELDS = [
 	'displayName'
 ];
 
-const DEFAULT_FILTERS_STR = `{
-    "boolean": {
-        "must": [
-            {
-                "exists": {
-                    "field": "_name"
-                }
-            }
-        ]
-    }
-}`;
+
+const DEFAULT_FILTERS_OBJ = {
+	boolean: {
+		must: [
+			{
+				exists: {
+					field: '_name'
+				}
+			}
+		]
+	}
+};
+const DEFAULT_FILTERS_STR = toStr(DEFAULT_FILTERS_OBJ);
+
+
+const DEFAULT_AGGREGATIONS_OBJ = {
+	/*repo: {
+		terms: {
+			field: 'repoId',
+			order: '_count desc',
+			size: 100
+		}
+	}, WARNING: Not currently possible */
+	type: {
+		terms: {
+			field: 'type',
+			order: '_count desc',
+			size: 100
+		}
+	}
+};
+const DEFAULT_AGGREGATIONS_STR = toStr(DEFAULT_AGGREGATIONS_OBJ);
+
 
 export function get(request) {
 	//log.info(`request:${toStr(request)}`);
@@ -38,7 +60,8 @@ export function get(request) {
 			fields: fieldsParam = DEFAULT_FIELDS,
 			sort: sortParam = '_score DESC',
 			explain: explainParam, // 'on' = true
-			filters: filtersParam = DEFAULT_FILTERS_STR
+			filters: filtersParam = DEFAULT_FILTERS_STR,
+			aggregations: aggregationsParam = DEFAULT_AGGREGATIONS_STR
 		}
 	} = request;
 	//log.info(`requestParams:${toStr(requestParams)}`);
@@ -47,6 +70,8 @@ export function get(request) {
 
 	const filtersObj = JSON.parse(filtersParam); // Ignores whitespace :)
 	//log.info(`filtersObj:${toStr(filtersObj)}`);
+
+	const aggregationsObj = JSON.parse(aggregationsParam); // Ignores whitespace :)
 
 	//log.info(`explainParam:${toStr(explainParam)}`);
 	const boolExplain = explainParam === 'on';
@@ -89,7 +114,8 @@ export function get(request) {
 			start: intStart,
 			sort: sortParam,
 			explain: boolExplain,
-			filters: filtersObj
+			filters: filtersObj,
+			aggregations: aggregationsObj
 		};
 		//log.info(`queryParams:${toStr(queryParams)}`);
 
@@ -134,6 +160,9 @@ export function get(request) {
 
 	const filtersArray = filtersText.split(/\r?\n/);
 	//log.info(`filtersArray:${toStr(filtersArray)}`);
+
+	const aggregationsText = toStr(aggregationsObj);
+	const aggregationsArray = aggregationsText.split(/\r?\n/);
 
 	const body = `<html>
 	<head>
@@ -185,6 +214,10 @@ export function get(request) {
 					<tr>
 						<th><label for="filters">Filters</label></th>
 						<td><textarea name="filters" rows="${filtersArray.length}">${filtersText}</textarea></td>
+					</tr>
+					<tr>
+						<th><label for="aggregations">Aggregations</label></th>
+						<td><textarea name="aggregations" rows="${aggregationsArray.length}">${aggregationsText}</textarea></td>
 					</tr>
 				</tbody>
 			</table>
