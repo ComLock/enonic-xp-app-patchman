@@ -1,0 +1,8 @@
+<?xml version="1.0" standalone="yes"?>
+<tool xmlns="urn:enonic:xp:model:1.0">
+	<display-name>PatchMan</display-name>
+	<description>PatchMan</description>
+	<allow>
+		<principal>role:system.admin</principal>
+	</allow>
+</tool>
