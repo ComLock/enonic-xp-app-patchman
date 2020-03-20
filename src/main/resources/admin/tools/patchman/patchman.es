@@ -1,6 +1,6 @@
 // Node modules
 import beautify from 'js-beautify';
-import serialize from 'serialize-javascript';
+//import serialize from 'serialize-javascript';
 //import traverse from 'traverse';
 
 // XP libraries
@@ -57,20 +57,28 @@ const DEFAULT_AGGREGATIONS_OBJ = {
 const DEFAULT_AGGREGATIONS_STR = toStr(DEFAULT_AGGREGATIONS_OBJ);
 
 
-const TOUCH_FN = (node) => {
-	/* eslint-disable no-param-reassign */
-	/* eslint-disable no-self-assign */
-	/* eslint-disable no-underscore-dangle */
+/* eslint-disable no-param-reassign */
+/* eslint-disable no-self-assign */
+/* eslint-disable no-underscore-dangle */
+/*const TOUCH_FN = (node) => {
 	node._id = 'RENAMED'; // This should fail miserably since modify should not be allowed to give a new id...
 	//node._name = node._name;
 	//node._path = node._path;
-	/* eslint-enable */
 	return node;
-};
-const TOUCH_FN_SERIALIZED = serialize(TOUCH_FN);
+};*/
+/* eslint-enable */
+
+const JS_STR = `
+	node._id = 'ID_CHANGED';
+	node._name = 'NAME_CHANGED';
+`;
+
+/*const TOUCH_FN_SERIALIZED = serialize(JS_STR, {
+	space: 4 // Doesn't work?
+});*/
 //log.info(`TOUCH_FN_SERIALIZED:${toStr(TOUCH_FN_SERIALIZED)}`);
 
-const TOUCH_FN_BEAUTIFIED = beautify(TOUCH_FN_SERIALIZED);
+const TOUCH_FN_BEAUTIFIED = beautify(JS_STR);
 //log.info(`TOUCH_FN_BEAUTIFIED:${TOUCH_FN_BEAUTIFIED}`);
 
 export function get(request) {
@@ -89,12 +97,17 @@ export function get(request) {
 			fields: fieldsParam = DEFAULT_FIELDS,
 			sort: sortParam = '_score DESC',
 			explain: explainParam, // 'on' = true
-			filters: filtersParam = DEFAULT_FILTERS_STR,
-			aggregations: aggregationsParam = DEFAULT_AGGREGATIONS_STR,
-			editorFn: modifyParam = TOUCH_FN_BEAUTIFIED
+			filters: filtersParam = DEFAULT_FILTERS_STR, // JSON
+			aggregations: aggregationsParam = DEFAULT_AGGREGATIONS_STR, // JSON
+			editorFn: modifyParam = TOUCH_FN_BEAUTIFIED,
+			modifyInReposWithIds: modifyInReposWithIdsParam = JSON.stringify({}), // JSON
+			action: actionParam = 'query'
 		}
 	} = request;
 	//log.info(`requestParams:${toStr(requestParams)}`);
+
+	const modifyInReposWithIds = actionParam === 'modify' ? JSON.parse(modifyInReposWithIdsParam) : {};
+	//log.info(`modifyInReposWithIds:${toStr(modifyInReposWithIds)}`);
 
 	//log.info(`modifyParam:${modifyParam}`);
 
@@ -138,7 +151,6 @@ export function get(request) {
 		total: 0
 	};
 	const seenTopFields = [];
-	const modifyInReposWithIds = {};
 
 	if (multirepoConnection) {
 		queryParams = {
@@ -166,7 +178,9 @@ export function get(request) {
 			//log.info(`modifyInReposWithIds:${toStr(modifyInReposWithIds)}`);
 
 			const node = singleRepoConnection.get(nodeId); // Get once
-			modifyInReposWithIds[repoId].push(nodeId);
+			if (!modifyInReposWithIds[repoId].includes(nodeId)) {
+				modifyInReposWithIds[repoId].push(nodeId);
+			}
 			//log.info(`modifyInReposWithIds:${toStr(modifyInReposWithIds)}`);
 
 			/*const paths = traverse(node).paths();
@@ -223,6 +237,37 @@ export function get(request) {
 
 	const modifyText = modifyParam;
 	const modifyLines = modifyText.split(/\r?\n/);
+
+	const modifiedNodes = {};
+	if (actionParam === 'modify') {
+		const evalContext = {};
+		// eslint-disable-next-line no-eval
+		const fn = eval(`function(node) {
+			${modifyParam}
+			return node;
+		}`, evalContext);
+		/*const testNode = {
+			_id: 'id',
+			_name: 'name'
+		};
+		const changedNode = fn(testNode);
+		log.info(`changedNode:${toStr(changedNode)}`);*/
+
+		Object.keys(modifyInReposWithIds).forEach((repoId) => {
+			const singleRepoConnection = singleRepoConnect({
+				repoId,
+				branch: 'master'
+			});
+			modifyInReposWithIds[repoId].forEach((nodeId) => {
+				const modifiedNode = singleRepoConnection.modify({
+					key: nodeId,
+					editor: fn
+				});
+				modifiedNodes[nodeId] = modifiedNode;
+			}); // each node in repo
+		}); // each repo
+	} // if modify
+	log.info(`modifiedNodes:${toStr(modifiedNodes)}`);
 
 	const body = `<html>
 	<head>
@@ -284,24 +329,16 @@ export function get(request) {
 						<th><label for="aggregations">Aggregations</label></th>
 						<td><textarea name="aggregations" rows="${aggregationsArray.length}">${aggregationsText}</textarea></td>
 					</tr>
-				</tbody>
-			</table>
-			<input type="submit" value="Query"/>
-		</form>
+					<tr>
+						<th><label for="action">Action</label></th>
+						<td>
+							<input checked id="actionQuery" name="action" type="radio" value="query"/>
+							<label for="actionQuery">Query</label>
 
-		<h2>Sources</h2>
-		<pre>${toStr(sources)}</pre>
-
-		<h2>Query params</h2>
-		<pre>${toStr(queryParams)}</pre>
-
-		<h2>Result</h2>
-		<pre>${toStr(result)}</pre>
-
-		<h2>Modify</h2>
-		<form enctype="application/x-www-form-urlencoded" method="POST">
-			<table style="width: 100%">
-				<tbody>
+							<input name="action" id="actionModify" type="radio" value="modify"/>
+							<label for="actionModify">Modify</label>
+						</td>
+					</tr>
 					<tr>
 						<th><label for="modifyInReposWithIds">Repositories and ids</label></th>
 						<td><textarea name="modifyInReposWithIds" rows="${modifyInReposWithIdsLines.length}">${modifyInReposWithIdsText}</textarea></td>
@@ -312,8 +349,17 @@ export function get(request) {
 					</tr>
 				</tbody>
 			</table>
-			<input type="submit" value="!!!MODIFY!!!"/>
+			<input type="submit" value="Query or Modify"/>
 		</form>
+
+		<h2>Sources</h2>
+		<pre>${toStr(sources)}</pre>
+
+		<h2>Query params</h2>
+		<pre>${toStr(queryParams)}</pre>
+
+		<h2>Result</h2>
+		<pre>${toStr(result)}</pre>
 	</body>
 </html>`;
 	return {
@@ -325,3 +371,24 @@ export function get(request) {
 export function post(request) {
 	return get(request);
 } // post
+
+/*
+
+<h2>Modify</h2>
+<form enctype="application/x-www-form-urlencoded" method="POST">
+	<table style="width: 100%">
+		<tbody>
+			<tr>
+				<th><label for="modifyInReposWithIds">Repositories and ids</label></th>
+				<td><textarea name="modifyInReposWithIds" rows="${modifyInReposWithIdsLines.length}">${modifyInReposWithIdsText}</textarea></td>
+			</tr>
+			<tr>
+				<th><label for="editorFn">Editor function</label></th>
+				<td><textarea name="editorFn" rows="${modifyLines.length}">${modifyText}</textarea></td>
+			</tr>
+		</tbody>
+	</table>
+	<input type="submit" value="!!!MODIFY!!!"/>
+</form>
+
+*/
