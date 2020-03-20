@@ -13,6 +13,7 @@ import {
 	connect as singleRepoConnect,
 	multiRepoConnect
 } from '/lib/xp/node';
+import {assetUrl} from '/lib/xp/portal';
 
 
 const DEFAULT_FIELDS = [
@@ -82,7 +83,11 @@ const JS_STR = `
 const TOUCH_FN_BEAUTIFIED = beautify(JS_STR);
 //log.info(`TOUCH_FN_BEAUTIFIED:${TOUCH_FN_BEAUTIFIED}`);
 
+
 export function get(request) {
+	const FAVICON_HREF = assetUrl({
+		path: 'images/svg/patchman.svg'
+	});
 	//log.info(`request:${toStr(request)}`);
 
 	const context = getContext();
@@ -275,6 +280,8 @@ export function get(request) {
 	const body = `<html>
 	<head>
 		<title>PatchMan</title>
+		<link rel="icon" href="${FAVICON_HREF}">
+
 		<style type="text/css">
 			input[type=text],
 			textarea {
@@ -287,7 +294,7 @@ export function get(request) {
 		</style>
 	</head>
 	<body>
-		<h1>PatchMan</h1>
+		<h1><svg version="1.0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 733 733" height="37" width="37"><path d="M733 367a366 366 0 11-733 0 366 366 0 01733 0z"/><path fill="#FEDE58" d="M699 370a336 336 0 11-673 0 336 336 0 01673 0z"/><path d="M325 665c-121-21-194-115-212-233v-8l-25-1-1-18h481c6 13 10 27 12 41 14 94-37 146-114 193-44 23-92 29-141 26z"/><path fill="#871945" d="M372 647c52-6 98-28 138-62 28-25 46-56 51-87 4-20 1-57-5-70l-423-1c-2 55 39 117 74 157 31 34 72 54 116 63 11 2 38 2 49 0z"/><path fill="#F9BEDD" stroke="#F9BEDD" d="M504 590s-46 40-105 53c-66 15-114-6-114-6s14-77 93-96c76-18 126 49 126 49z"/><path d="M76 342a145 145 0 0126-153c21-20 50-23 77-18 15 4 28 12 39 23 18 17 30 40 36 67 4 20 4 41 0 60l-6 21-86 1-86-1zM378 341c-2-3-6-18-8-27-4-28 0-57 12-83 15-30 41-52 72-60 29-7 57 0 82 15 26 17 45 49 50 82a138 138 0 01-8 74l-100 1c-93 0-99 0-100-2z"/><path fill="#FFF" d="M237 264c-8-37-24-73-66-77h-20c-42 4-58 40-66 77-1 6-2 15-1 24-1 15 1 31 4 35h2a1309 1309 0 00144 0c3-4 5-20 4-35 1-9 0-18-1-24zM564 323c4-5 6-39 3-55-6-24-15-48-34-61-6-6-14-10-23-13l-8-3c-51-17-105 20-115 80-3 15 0 43 3 53h68a3273 3273 0 00106-1z"/><circle cx="114" cy="294" r="40"/><circle cx="416" cy="294" r="40"/><path fill="none" stroke="#000" stroke-width="15" d="M158 117l148 86M300 202l193-78"/></svg> PatchMan</h1>
 
 		<h2>Context</h2>
 		<pre>${toStr(context)}</pre>

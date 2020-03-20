@@ -89,7 +89,7 @@ sourceSets {
 			srcDir 'src/main/java'
 		}
 		resources { // Paths relative to src/main/resources
-			exclude 'assets/**/*.svg'
+			//exclude 'assets/**/*.svg'
 		}
 	}
 }
