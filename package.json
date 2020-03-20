@@ -1,6 +1,7 @@
 {
   "author": "Christian Andreas Westgaard <comlock@gmail.com>",
   "dependencies": {
+    "deep-diff": "^1.0.2",
     "js-beautify": "^1.10.3",
     "serialize-javascript": "^3.0.0",
     "traverse": "^0.6.6"

@@ -1,4 +1,5 @@
 // Node modules
+import diff from 'deep-diff';
 import beautify from 'js-beautify';
 //import serialize from 'serialize-javascript';
 //import traverse from 'traverse';
@@ -259,15 +260,17 @@ export function get(request) {
 				branch: 'master'
 			});
 			modifyInReposWithIds[repoId].forEach((nodeId) => {
+				const currentNode = singleRepoConnection.get(nodeId);
 				const modifiedNode = singleRepoConnection.modify({
 					key: nodeId,
 					editor: fn
 				});
-				modifiedNodes[nodeId] = modifiedNode;
+				//modifiedNodes[nodeId] = modifiedNode;
+				modifiedNodes[nodeId] = diff(currentNode, modifiedNode);
 			}); // each node in repo
 		}); // each repo
 	} // if modify
-	log.info(`modifiedNodes:${toStr(modifiedNodes)}`);
+	//log.info(`modifiedNodes:${toStr(modifiedNodes)}`);
 
 	const body = `<html>
 	<head>
@@ -360,6 +363,9 @@ export function get(request) {
 
 		<h2>Result</h2>
 		<pre>${toStr(result)}</pre>
+
+		<h2>Diff</h2>
+		<pre>${toStr(modifiedNodes)}</pre>
 	</body>
 </html>`;
 	return {
