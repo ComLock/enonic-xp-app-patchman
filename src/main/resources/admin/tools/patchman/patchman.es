@@ -1,5 +1,5 @@
 // Node modules
-import diff from 'deep-diff';
+import {diff as generateDiff} from 'deep-diff';
 import beautify from 'js-beautify';
 //import serialize from 'serialize-javascript';
 //import traverse from 'traverse';
@@ -244,7 +244,9 @@ export function get(request) {
 	const modifyText = modifyParam;
 	const modifyLines = modifyText.split(/\r?\n/);
 
-	const modifiedNodes = {};
+	const allDiffsObj = {};
+	const allPatchObj = {};
+	const allRollbackObj = {};
 	if (actionParam === 'modify') {
 		const evalContext = {};
 		// eslint-disable-next-line no-eval
@@ -266,16 +268,55 @@ export function get(request) {
 			});
 			modifyInReposWithIds[repoId].forEach((nodeId) => {
 				const currentNode = singleRepoConnection.get(nodeId);
-				const modifiedNode = singleRepoConnection.modify({
+				//log.info(`currentNode:${toStr(currentNode)}`);
+
+				const modifiedNode = fn(JSON.parse(JSON.stringify(currentNode))); // deref
+				/*const modifiedNode = singleRepoConnection.modify({
 					key: nodeId,
 					editor: fn
+				});*/
+				//log.info(`modifiedNode:${toStr(modifiedNode)}`);
+				log.info(`currentNode:${toStr(currentNode)}`);
+
+				const singleDiffObj = generateDiff(currentNode, modifiedNode);
+				log.info(`singleDiffObj:${toStr(singleDiffObj)}`);
+
+				//allDiffsObj[nodeId] = modifiedNode;
+				allDiffsObj[nodeId] = singleDiffObj;
+
+				allPatchObj[nodeId] = [];
+				allRollbackObj[nodeId] = [];
+				singleDiffObj.forEach(({
+					kind, path, lhs, rhs
+				}) => {
+					const singlePatch = {
+						path
+					};
+					const singleRollback = {
+						path
+					};
+					switch (kind) {
+					case 'E':
+						singlePatch.op = 'replace';
+						singlePatch.value = rhs;
+						singleRollback.op = 'replace';
+						singleRollback.value = lhs;
+						break;
+					case 'N':
+						singlePatch.op = 'add';
+						singlePatch.value = rhs;
+						singleRollback.op = 'remove';
+						break;
+					default:
+						throw new Error(`Unhandeled diff kind:${kind}!`);
+					} // switch
+					allPatchObj[nodeId].push(singlePatch);
+					allRollbackObj[nodeId].push(singleRollback);
 				});
-				//modifiedNodes[nodeId] = modifiedNode;
-				modifiedNodes[nodeId] = diff(currentNode, modifiedNode);
 			}); // each node in repo
 		}); // each repo
 	} // if modify
-	//log.info(`modifiedNodes:${toStr(modifiedNodes)}`);
+	//log.info(`allDiffsObj:${toStr(allDiffsObj)}`);
 
 	const body = `<html>
 	<head>
@@ -388,7 +429,13 @@ export function get(request) {
 		<pre>${toStr(result)}</pre>
 
 		<h2>Diff</h2>
-		<pre>${toStr(modifiedNodes)}</pre>
+		<pre>${toStr(allDiffsObj)}</pre>
+
+		<h2>Patch</h2>
+		<pre>${toStr(allPatchObj)}</pre>
+
+		<h2>Rollback</h2>
+		<pre>${toStr(allRollbackObj)}</pre>
 	</body>
 </html>`;
 	return {
