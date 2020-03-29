@@ -1,7 +1,25 @@
 // Node modules
-import {diff as generateDiff} from 'deep-diff';
+//import {diff as generateDiff} from 'deep-diff'; // Not RFC 6902
+/*import {
+	diff as generateDelta,
+	formatters,
+	patch,
+	reverse
+} from 'jsondiffpatch'; // Not atomic*/
+/*import {
+	diff as generateDiff,
+	apply as applyDiff,
+	revert as revertDiff
+} from 'json8-patch'; // Atomic but WARNING Uses Set :(*/
+import {
+	diff as generateDiff//,
+	//patch as applyPatch,
+	//inverse as generateInversePatch
+} from 'jiff';
+//import {createPatch, applyPatch, } from 'rfc6902';
 import beautify from 'js-beautify';
 //import serialize from 'serialize-javascript';
+import set from 'set-value';
 //import traverse from 'traverse';
 
 // XP libraries
@@ -15,6 +33,7 @@ import {
 } from '/lib/xp/node';
 import {assetUrl} from '/lib/xp/portal';
 
+const BRANCH_MASTER = 'master';
 
 const DEFAULT_FIELDS = [
 	'_id',
@@ -144,9 +163,10 @@ export function get(request) {
 	const repoOptionsHtml = allRepoIds.map((id) => `<option${selectedRepoIds.includes(id) ? ' selected' : ''} value="${id}">${id}</option>`).join('');
 	//log.info(`repoOptionsHtml:${toStr(repoOptionsHtml)}`);
 
+
 	const sources = selectedRepoIds.map((repoId) => ({
 		repoId,
-		branch: 'master',
+		branch: BRANCH_MASTER,
 		principals: ['role:system.admin']
 	}));
 	//log.info(`sources:${toStr(sources)}`);
@@ -172,11 +192,11 @@ export function get(request) {
 
 		result = multirepoConnection.query(queryParams);
 		result.hits = result.hits.map(({
-			id: nodeId, score, repoId, branch
+			id: nodeId, score, repoId//, branch
 		}) => {
 			const singleRepoConnection = singleRepoConnect({
 				repoId,
-				branch
+				branch: BRANCH_MASTER
 			});
 			if (!modifyInReposWithIds[repoId]) {
 				modifyInReposWithIds[repoId] = [];
@@ -206,7 +226,7 @@ export function get(request) {
 				}
 			});
 			return {
-				nodeId, score, repoId, branch, node
+				nodeId, score, repoId, branch: BRANCH_MASTER, node
 			};
 		});
 	}
@@ -214,14 +234,14 @@ export function get(request) {
 
 	if (selectedFields.length) {
 		result.hits = result.hits.map(({
-			nodeId, score, repoId, branch, node
+			nodeId, score, repoId/*, branch*/, node
 		}) => {
 			const filteredNode = {};
 			selectedFields.forEach((selectedField) => {
 				filteredNode[selectedField] = node[selectedField];
 			});
 			return {
-				nodeId, score, repoId, branch, node: filteredNode
+				nodeId, score, repoId, branch: BRANCH_MASTER, node: filteredNode
 			};
 		});
 	}
@@ -245,8 +265,6 @@ export function get(request) {
 	const modifyLines = modifyText.split(/\r?\n/);
 
 	const allDiffsObj = {};
-	const allPatchObj = {};
-	const allRollbackObj = {};
 	if (actionParam === 'modify') {
 		const evalContext = {};
 		// eslint-disable-next-line no-eval
@@ -254,65 +272,33 @@ export function get(request) {
 			${modifyParam}
 			return node;
 		}`, evalContext);
-		/*const testNode = {
-			_id: 'id',
-			_name: 'name'
-		};
-		const changedNode = fn(testNode);
-		log.info(`changedNode:${toStr(changedNode)}`);*/
 
 		Object.keys(modifyInReposWithIds).forEach((repoId) => {
 			const singleRepoConnection = singleRepoConnect({
 				repoId,
-				branch: 'master'
+				branch: BRANCH_MASTER
 			});
 			modifyInReposWithIds[repoId].forEach((nodeId) => {
 				const currentNode = singleRepoConnection.get(nodeId);
 				//log.info(`currentNode:${toStr(currentNode)}`);
 
-				const modifiedNode = fn(JSON.parse(JSON.stringify(currentNode))); // deref
-				/*const modifiedNode = singleRepoConnection.modify({
+				//const modifiedNode = fn(JSON.parse(JSON.stringify(currentNode))); // deref
+				const modifiedNode = singleRepoConnection.modify({
 					key: nodeId,
 					editor: fn
-				});*/
+				});
 				//log.info(`modifiedNode:${toStr(modifiedNode)}`);
-				log.info(`currentNode:${toStr(currentNode)}`);
+				//log.info(`currentNode:${toStr(currentNode)}`);
 
-				const singleDiffObj = generateDiff(currentNode, modifiedNode);
-				log.info(`singleDiffObj:${toStr(singleDiffObj)}`);
+				const singlePatch = generateDiff(currentNode, modifiedNode);
+				//log.info(`singleDiffObj:${toStr(singlePatch)}`);
+
+				/*const singleRollback = generateInversePatch(singlePatch);
+				log.info(`singleRollback:${toStr(singleRollback)}`);*/
 
 				//allDiffsObj[nodeId] = modifiedNode;
-				allDiffsObj[nodeId] = singleDiffObj;
-
-				allPatchObj[nodeId] = [];
-				allRollbackObj[nodeId] = [];
-				singleDiffObj.forEach(({
-					kind, path, lhs, rhs
-				}) => {
-					const singlePatch = {
-						path
-					};
-					const singleRollback = {
-						path
-					};
-					switch (kind) {
-					case 'E':
-						singlePatch.op = 'replace';
-						singlePatch.value = rhs;
-						singleRollback.op = 'replace';
-						singleRollback.value = lhs;
-						break;
-					case 'N':
-						singlePatch.op = 'add';
-						singlePatch.value = rhs;
-						singleRollback.op = 'remove';
-						break;
-					default:
-						throw new Error(`Unhandeled diff kind:${kind}!`);
-					} // switch
-					allPatchObj[nodeId].push(singlePatch);
-					allRollbackObj[nodeId].push(singleRollback);
-				});
+				//allDiffsObj[repoId][BRANCH_MASTER][nodeId] = singlePatch;
+				set(allDiffsObj, `${repoId}.${BRANCH_MASTER}.${nodeId}`, singlePatch);
 			}); // each node in repo
 		}); // each repo
 	} // if modify
@@ -385,10 +371,10 @@ export function get(request) {
 							<td><textarea name="aggregations" rows="${aggregationsArray.length}">${aggregationsText}</textarea></td>
 						</tr>
 					</table>
-					<input type="submit" value="Query (or Modify)"/>
+					<input type="submit" value="Query and generate patch"/>
 				</details>
 				<details>
-					<summary>Modify</summary>
+					<summary>Generate Patch</summary>
 						<table style="width: 100%">
 							<tbody>
 						<tr>
@@ -411,7 +397,7 @@ export function get(request) {
 						</tr>
 					</tbody>
 				</table>
-				<input type="submit" value="Query or Modify (or Query)"/>
+				<input type="submit" value="Query and generate patch"/>
 			</details>
 		</form>
 
@@ -425,17 +411,11 @@ export function get(request) {
 			<pre>${toStr(queryParams)}</pre>
 		</details>
 
-		<h2>Result</h2>
+		<h2>Resultset</h2>
 		<pre>${toStr(result)}</pre>
 
-		<h2>Diff</h2>
-		<pre>${toStr(allDiffsObj)}</pre>
-
 		<h2>Patch</h2>
-		<pre>${toStr(allPatchObj)}</pre>
-
-		<h2>Rollback</h2>
-		<pre>${toStr(allRollbackObj)}</pre>
+		<pre>${toStr(allDiffsObj)}</pre>
 	</body>
 </html>`;
 	return {
