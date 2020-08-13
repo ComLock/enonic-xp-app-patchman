@@ -6,7 +6,7 @@
     "js-beautify": "^1.10.3",
     "json8-patch": "^1.0.1",
     "jsondiffpatch": "^0.4.1",
-    "serialize-javascript": "^3.0.0",
+    "serialize-javascript": "^3.1.0",
     "set-value": "^3.0.1",
     "traverse": "^0.6.6"
   },
